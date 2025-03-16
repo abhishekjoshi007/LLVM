@@ -1,0 +1,32 @@
+?start: statement+
+
+?statement: "let" CNAME "=" expr ";"                    
+          | "print" "(" expr ")" ";"                    
+          | "if" "(" expr ")" "{" statement+ "}" ("else" "{" statement+ "}")?  -> if_stmt
+          | "while" "(" expr ")" "{" statement+ "}"     
+          | func_def
+
+func_def: "function" CNAME "(" [param_list] ")" "{" statement+ "}"
+param_list: CNAME ("," CNAME)*
+
+?expr: expr "+" term       -> add
+     | expr "-" term       -> sub
+     | term
+
+?term: term "*" factor     -> mul
+     | term "/" factor     -> div
+     | factor
+
+?factor: NUMBER            -> number
+       | ESCAPED_STRING    -> string
+       | CNAME             -> variable
+       | CNAME "(" [arg_list] ")"   -> func_call
+       | "(" expr ")"
+
+arg_list: expr ("," expr)*
+
+%import common.CNAME
+%import common.NUMBER
+%import common.ESCAPED_STRING
+%import common/WS
+%ignore WS

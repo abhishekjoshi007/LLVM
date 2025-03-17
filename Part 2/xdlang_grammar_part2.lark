@@ -1,0 +1,50 @@
+start: function+
+
+function: "fn" CNAME "(" ")" ":" type block
+
+type: "int"
+
+block: "{" statement* "}"
+
+statement: return_stmt
+          | let_stmt
+          | mut_stmt
+          | print_stmt
+          | if_stmt
+          | while_stmt
+
+// let int x = 5;
+let_stmt: "let" type CNAME "=" expr ";"
+
+// mut x = x + 1;
+mut_stmt: "mut" CNAME "=" expr ";"
+
+// print(x);
+print_stmt: "print" "(" expr ")" ";"
+
+// if (x) { ... } else { ... }
+if_stmt: "if" "(" expr ")" block ("else" block)?
+
+// while (x) { ... }
+while_stmt: "while" "(" expr ")" block
+
+// return 0;
+return_stmt: "return" expr ";"
+
+// Expressions: +, -, *, /
+?expr: expr "+" term -> add
+     | expr "-" term -> sub
+     | term
+
+?term: term "*" factor -> mul
+     | term "/" factor -> div
+     | factor
+
+?factor: NUMBER        -> number
+       | CNAME         -> variable
+       | "(" expr ")"
+
+%import common.CNAME
+%import common.NUMBER
+%import common.WS
+%ignore WS

@@ -1,0 +1,145 @@
+PART 2: XDLANG COMPILER EXPLANATION
+===================================
+
+1. OVERVIEW
+-----------
+In this phase (Part 2), we expanded the XDLANG compiler from a minimal setup
+to support additional language features and a more complete compilation pipeline.
+
+The key goals were:
+- Having a single-file XDLANG program with a special "main" function.
+- Handling statements such as:
+  * return
+  * let
+  * mut
+  * print
+  * if
+  * while
+- Generating LLVM IR with llvmlite, then compiling to a native executable with clang.
+- Running the resulting program to confirm correct behavior.
+
+2. LANGUAGE FEATURES
+--------------------
+We introduced or extended:
+- `fn main(): int { ... }` as the entry point.
+- Block statements `{ ... }` containing multiple statements.
+- Data type: "int" (32-bit integer).
+- Statements:
+  * return <expr>;
+  * let int x = <expr>;
+  * mut x = <expr>;
+  * print(<expr>);
+  * if (<expr>) { ... } [else { ... }]
+  * while (<expr>) { ... }
+- Expressions: integer literals, variables, basic arithmetic (+, -, *, /).
+
+3. PROJECT STRUCTURE
+--------------------
+Here are the main files involved:
+
+- xdlang_grammar_part2.lark
+  Defines the grammar rules using Lark. Top-level rule is `start: function+`.
+  Supports statements (let, mut, print, if, while, return) and arithmetic expressions.
+
+- parser.py
+  Reads the grammar file and uses Lark to parse the .xd source code into a parse tree.
+  Prints debug info if needed (grammar contents, parse tree).
+
+- ast_builder.py
+  Transforms the parse tree into a structured Abstract Syntax Tree (AST). Each rule
+  in the grammar has a corresponding method that returns a Python dictionary (e.g.,
+  {"type": "let", "name": "x", "value": ...}).
+
+- build_ast.py
+  A small script that calls parser.py + ast_builder.py to build an AST from a given
+  .xd file. Useful for debugging.
+
+- semantic_analyzer.py
+  Performs basic checks:
+  * Ensures there is a main() function returning int.
+  * Verifies variables are declared before mutation.
+  * (Optional) Additional checks as the language grows.
+
+- codegen.py
+  Uses llvmlite to generate LLVM IR from the AST. It handles:
+  * let (alloca/store)
+  * mut (load/modify/store)
+  * print (calls printf)
+  * if (branch instructions)
+  * while (loop blocks)
+  * return (return instruction)
+  * arithmetic (+, -, *, /)
+
+- compiler.py
+  A Typer-based CLI script that:
+  1) Builds the AST from a .xd file
+  2) Runs semantic analysis
+  3) Generates LLVM IR (output.ll)
+  4) Compiles the IR with clang (output)
+  5) Runs the resulting executable
+
+- main.xd
+  A sample XDLANG program demonstrating the new features.
+
+4. HOW THE CODE WORKS
+---------------------
+Here is the general flow when you run "python compiler.py main.xd" (or
+"python compiler.py compile-and-run main.xd" if subcommands are used):
+
+1) **Parsing**:
+   parser.py loads xdlang_grammar_part2.lark, then parses main.xd into a parse tree.
+   This parse tree shows the structure of the code, including function definitions,
+   statements, and expressions.
+
+2) **AST Building**:
+   ast_builder.py transforms the parse tree nodes into a more convenient AST of
+   dictionaries. For example:
+   {
+     "type": "program",
+     "functions": [
+       {
+         "type": "function",
+         "name": "main",
+         "ret_type": "int",
+         "body": [
+           {"type": "let", "name": "x", "value": ...},
+           ...
+         ]
+       }
+     ]
+   }
+
+3) **Semantic Analysis**:
+   semantic_analyzer.py checks that:
+   - A "main" function exists and returns int.
+   - Variables are declared before they are mutated.
+   - (Future expansions: type checking, function calls, etc.)
+
+4) **LLVM IR Generation**:
+   codegen.py walks the AST and uses llvmlite to produce LLVM IR instructions.
+   - let -> allocate an i32 on the stack and store the initial value.
+   - mut -> load the variable, modify it, store back.
+   - print -> call "printf" with a format string and the value.
+   - if -> generate conditional branches and blocks.
+   - while -> generate a loop structure (cond block, body block, end block).
+   - return -> create a "ret" instruction with the specified value.
+
+   The generated IR is saved to "output.ll".
+
+5) **Compilation & Execution**:
+   - The script calls clang to compile output.ll into a native executable named "output".
+   - Finally, it runs ./output, which prints or returns values based on the XDLANG code.
+
+6) **Verification**:
+   If everything is correct, you see the expected output (e.g., "7\n123\n3\n2\n1\n")
+   and can confirm the exit code with "echo $?".
+
+5. CONCLUSION
+-------------
+With Part 2 complete, we have:
+- A working multi-pass compiler for XDLANG with advanced statements and integer
+  arithmetic.
+- The ability to parse, analyze, generate IR, compile, and run in one step.
+- A foundation to add more data types, operators, and features in future parts.
+
+Enjoy extending XDLANG even further!

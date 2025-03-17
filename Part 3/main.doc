@@ -1,0 +1,137 @@
+DOC_PART3.txt
+
+TITLE: XDLANG Compiler - Part 3 (Parser Refinement and Extension)
+
+1. INTRODUCTION
+---------------
+In this phase (Part 3), we focused on enhancing and refining the parser for XDLANG. 
+The main objectives were:
+- Improving operator precedence (logical, comparison, arithmetic, unary).
+- Potentially adding statements like break/continue.
+- Integrating these changes into the existing compiler pipeline.
+
+2. WHAT WE DID
+--------------
+a) Expanded Grammar:
+   - We created a new grammar file (xdlang_grammar_part3.lark) that defines multiple
+     levels of expression rules:
+       1) or_expr (logical OR)
+       2) and_expr (logical AND)
+       3) comp_expr (comparison: ==, !=, <, >, <=, >=)
+       4) sum_expr (+, -)
+       5) term (*, /, %)
+       6) factor (parentheses or unary)
+       7) unary (!, -)
+       8) atom (numbers, variables)
+   - This layered approach ensures correct operator precedence. For example, 
+     multiplication binds more tightly than addition, comparisons come after 
+     arithmetic, etc.
+
+b) Updated Parser (parser.py):
+   - The parser reads xdlang_grammar_part3.lark, creating a Lark parser with 
+     start="start" and parser="lalr".
+   - We catch parse errors using `try/except UnexpectedInput` to show a snippet 
+     if something goes wrong.
+
+c) AST Builder (ast_builder.py):
+   - We introduced transformer methods for each new operator rule (eq, ne, lt, 
+     gt, etc.), plus logical_and, logical_or, neg, and so on.
+   - We also added optional statements like break_stmt, continue_stmt, and 
+     integrated them into the AST as {"type": "break"} or {"type": "continue"}.
+   - The final AST for an expression like x < 5 is: 
+       {"type": "lt", "left": {"type": "variable", "name": "x"}, "right": 5}.
+
+d) Semantic Analysis (semantic_analyzer.py):
+   - We updated or extended checks to ensure break/continue only appear in loops.
+   - We still do minimal type checks but confirm variables are declared 
+     before use, and that main() exists.
+
+e) Code Generation (codegen.py):
+   - We added instructions for new operators:
+       * % -> builder.srem(left, right)
+       * Comparisons -> builder.icmp_signed("==", etc.)
+       * and/or -> short-circuit or minimal approach
+       * neg -> builder.neg(...)
+       * not -> bitwise xor with 1
+   - For break/continue, we used a minimal approach. You can expand it to fully 
+     handle jumping out of or continuing loops if needed.
+
+f) Command-Line Interface (compiler.py):
+   - We can run the compiler either as a single command:
+       python compiler.py main.xd
+     or as a subcommand (if we remove overshadowing code):
+       python compiler.py compile-file main.xd
+     The main goal is that we pass the .xd file, parse it, analyze, 
+     generate IR, compile with clang, and run the executable.
+
+3. HOW WE DID IT
+----------------
+1) Grammar Refinement:
+   - We rewrote expressions in a layered fashion. For example:
+
+       ?expr: or_expr
+
+       ?or_expr: and_expr
+               | or_expr "or" and_expr -> logical_or
+
+       ?and_expr: comp_expr
+                | and_expr "and" comp_expr -> logical_and
+
+       ?comp_expr: sum_expr
+                 | comp_expr "==" sum_expr -> eq
+                 | ...
+       (and so on)
+
+   - This ensures that an expression like x + 2 * y < 10 or x != 0 is parsed 
+     in the correct order.
+
+2) Parse Tree -> AST:
+   - The ASTBuilder extends Transformer. Each rule from the grammar has a 
+     method that returns a Python dict. For example, eq(self, items) returns 
+     {"type": "eq", "left": items[0], "right": items[1]}.
+
+3) Error Handling:
+   - We use a try/except around parser.parse(...) to catch UnexpectedInput. 
+     If there's a syntax error, we print a snippet to help debug.
+
+4) Integration:
+   - We tested sample .xd files with new operators. 
+   - The code generator recognizes eq, ne, lt, le, etc. using icmp_signed. 
+   - Logical ops (and, or) are done by comparing nonzero, then combining 
+     with builder.and_ or builder.or_.
+
+4. EXAMPLE USE CASE
+-------------------
+Consider a file main.xd:
+
+    fn main(): int {
+        let int x = 10;
+        if (x > 5 and x < 20) {
+            print(111);
+        }
+        while (x != 0) {
+            print(x);
+            mut x = x - 1;
+        }
+        return x;
+    }
+
+Running:
+    python compiler.py main.xd
+(or subcommand approach, if configured) yields output like:
+
+    111
+    10
+    9
+    8
+    ...
+    1
+
+5. CONCLUSION
+-------------
+In Part 3, we concentrated on making the parser robust and expressive. 
+We introduced multi-level expression rules, new operators, and integrated 
+these changes into our existing compiler. The result is a more powerful 
+and maintainable XDLANG compiler that can handle complex expressions and 
+statements while still supporting the entire pipeline of parsing, 
+semantic checks, code generation, compilation, and execution.

@@ -1,0 +1,166 @@
+
+## Overview of the Project
+
+Our project implements a simple compiler for a minimal programming language called **XDLANG**. The compiler is written in Python and demonstrates the complete pipeline from source code to an executable program using LLVM. The key stages are:
+
+1. **Lexical Analysis & Parsing**
+2. **AST Transformation**
+3. **(Basic) Semantic Analysis**
+4. **LLVM IR Generation & Code Generation**
+5. **Compilation & Execution**
+
+Each of these stages is handled by a different part of our codebase.
+
+---
+
+## 1. Lexical Analysis & Parsing
+
+- **Tool Used:** [Lark Parser](https://github.com/lark-parser/lark)  
+- **File:** `xdlang_grammar.lark`  
+- **Purpose:**  
+  The grammar file defines the syntax of XDLANG. It tells Lark how to break a source file into tokens (keywords, numbers, identifiers, strings) and how to group these tokens into a parse tree representing statements (like assignments, prints, conditionals, loops, and even function definitions or calls).
+
+---
+
+## 2. AST Transformation
+
+- **Tool Used:** A custom transformer built with Lark's `Transformer` class  
+- **File:** `ast_builder.py`  
+- **Purpose:**  
+  After parsing, Lark produces a raw parse tree that includes lots of tokens and structural details. The **AST (Abstract Syntax Tree)** is a simplified version that contains only the essential information.  
+- **How It Works:**  
+  - Each grammar rule (like an assignment or a print statement) is converted into a Python dictionary with keys such as `"type"`, `"name"`, `"value"`, etc.
+  - For example, an assignment statement is transformed to:
+    ```python
+    {"type": "assign", "name": <variable>, "value": <expression>}
+    ```
+  - Variable tokens are wrapped into a dictionary (e.g., `{"type": "variable", "name": "x"}`) to distinguish them from literal strings.
+  - The AST is then passed to the code generation stage.
+
+---
+
+## 3. Basic Semantic Analysis
+
+- **Note:**  
+  Our implementation includes very basic semantic work. For example, during code generation we maintain a symbol table (in `codegen.py`) to keep track of variable allocations.  
+- **Purpose:**  
+  In a more advanced compiler, this phase would check that variables are defined before use, verify type correctness, and more. In our project, this step is combined with code generation by updating a symbol table as we process assignment statements.
+
+---
+
+## 4. LLVM IR Generation & Code Generation
+
+- **Tool Used:** [llvmlite](https://llvmlite.readthedocs.io/)  
+- **File:** `codegen.py`  
+- **Purpose:**  
+  This part of the compiler takes the AST and produces LLVM Intermediate Representation (IR). LLVM IR is a low-level language that can be compiled to machine code by tools like clang.
+- **Key Components:**
+  - **Module and Builder:**  
+    A new LLVM module is created, and an IRBuilder is used to append instructions. The module also has a target triple (set to match macOS on ARM).
+  
+  - **Main Function Generation:**  
+    A main function (`int main()`) is created as the entry point. All code is generated within this function.
+  
+  - **Variable Handling:**  
+    - When processing an assignment, the compiler uses `alloca` to allocate memory for the variable.
+    - The variable's value is computed (via recursive processing of the expression) and stored.
+    - The symbol table records the allocation so that later variable references load the stored value.
+  
+  - **Arithmetic Operations:**  
+    Arithmetic expressions (addition, subtraction, multiplication, division) are compiled into corresponding LLVM IR instructions.  
+    For example:
+    ```python
+    self.builder.add(left, right)
+    ```
+  
+  - **Print Statements:**  
+    The compiler declares the C standard `printf` function and generates calls to it.  
+    For string literals, it creates global string constants and passes their pointers to `printf`.
+  
+  - **Control Flow (If and While):**  
+    - **If Statements:**  
+      The condition is compiled into a value, which is then converted into an i1 (boolean) type using a comparison (nonzero check). Basic blocks are created for the then branch, optional else branch, and merge block where execution continues.
+    - **While Loops:**  
+      Similarly, a while loop creates blocks for the loop condition, loop body, and a block to jump to when the loop terminates. The condition is checked and, if nonzero, the loop body is executed; otherwise, the loop ends.
+  
+  - **Type Conversion in Conditions:**  
+    When conditions (for if or while) are arithmetic values (like an integer 2), they are converted to boolean (`i1`) by comparing with zero.
+  
+- **Process:**  
+  - The AST is traversed statement by statement.
+  - Each statement is compiled into one or more LLVM IR instructions.
+  - Finally, the builder adds a return instruction (returning 0).
+
+- **Output:**  
+  The LLVM IR is written to an output file (`output.ll`).
+
+---
+
+## 5. Compilation & Execution
+
+- **Steps:**
+  1. **Generate LLVM IR:**  
+     Run the code generator:
+     ```bash
+     python codegen.py
+     ```
+     This produces the `output.ll` file.
+  
+  2. **Compile LLVM IR to an Executable:**  
+     Use clang with the appropriate macOS SDK:
+     ```bash
+     clang -isysroot $(xcrun --sdk macosx --show-sdk-path) -o output output.ll
+     ```
+  
+  3. **Run the Executable:**  
+     Finally, run:
+     ```bash
+     ./output
+     ```
+- **What You See:**  
+  Based on our sample AST, the executable prints:
+  - "Hello, XDLANG!"  
+  - "Inside if" (from the if statement)  
+  - "Looping..." a finite number of times (e.g., 5 times, as the while loop decrements the variable `x` until it reaches 0)
+
+---
+
+## How the Code Runs (Step by Step)
+
+1. **Parsing and AST Building:**  
+   - The source code (or a sample AST in our test) is parsed using Lark with `xdlang_grammar.lark`.
+   - The ASTBuilder transforms the parse tree into a simpler AST (a list of dictionaries).
+
+2. **Semantic Setup:**  
+   - In `codegen.py`, before generating any code, the symbol table is initialized, and the `printf` function is declared.
+  
+3. **LLVM IR Generation:**  
+   - The `create_main_function` method sets up the main function and initializes the IRBuilder.
+   - The `compile_ast` method iterates through each statement in the AST:
+     - For **assignments**, it generates an `alloca` for the variable, computes the value, and stores it.
+     - For **print statements**, it creates or reuses a global string and calls `printf`.
+     - For **if statements** and **while loops**, it sets up basic blocks and branch instructions. Conditions are converted to boolean (i1) values.
+  
+4. **Finalization:**  
+   - A return instruction is added to the main function.
+   - The complete LLVM module is written to `output.ll`.
+
+5. **Compilation:**  
+   - The LLVM IR is then compiled into an executable using clang.
+  
+6. **Execution:**  
+   - When you run the executable, the instructions in LLVM IR (now translated into machine code) are executed, producing the expected output on the terminal.
+
+---
+
+## Conclusion
+
+This project demonstrates the entire lifecycle of a simple compiler:
+- Defining a language grammar and parsing source code.
+- Transforming the parse tree into a simplified AST.
+- Generating LLVM IR from the AST and handling variables, arithmetic, control structures, and I/O.
+- Compiling the LLVM IR into an executable that runs on your system.
+
+This implementation, although minimal, gives you a complete pipeline from source code to a working program, serving as an excellent foundation for further extensions like adding more data types, function support, and advanced semantic analysis.
+
+Let me know if you need any further clarifications or additional details!

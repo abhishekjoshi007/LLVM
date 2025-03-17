@@ -1,0 +1,17 @@
+fn main(): int {
+    let int x = 5;
+    mut x = x + 2;
+    print(x);
+
+    if (x) {
+        print(123);
+    }
+
+    let int counter = 3;
+    while (counter) {
+        print(counter);
+        mut counter = counter - 1;
+    }
+
+    return x;
+}

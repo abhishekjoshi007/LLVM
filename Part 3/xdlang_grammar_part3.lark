@@ -1,0 +1,92 @@
+start: function+
+
+function: "fn" CNAME "(" ")" ":" type block
+
+type: "int"
+
+block: "{" statement* "}"
+
+statement: return_stmt
+          | let_stmt
+          | mut_stmt
+          | print_stmt
+          | if_stmt
+          | while_stmt
+          | break_stmt
+          | continue_stmt
+
+// Example: return x + 1;
+return_stmt: "return" expr ";"
+
+// Example: let int x = 10;
+let_stmt: "let" type CNAME "=" expr ";"
+
+// Example: mut x = x + 1;
+mut_stmt: "mut" CNAME "=" expr ";"
+
+// Example: print(x);
+print_stmt: "print" "(" expr ")" ";"
+
+// Example: if (x < 10) { ... } else { ... }
+if_stmt: "if" "(" expr ")" block ("else" block)?
+
+// Example: while (x) { ... }
+while_stmt: "while" "(" expr ")" block
+
+// Example: break;
+break_stmt: "break" ";"
+
+// Example: continue;
+continue_stmt: "continue" ";"
+
+// ------------- Expressions (multi-level precedence) --------------
+
+// The top-level expression rule
+?expr: or_expr
+
+// Logical OR: "or"
+?or_expr: and_expr
+        | or_expr "or" and_expr     -> logical_or
+
+// Logical AND: "and"
+?and_expr: comp_expr
+         | and_expr "and" comp_expr -> logical_and
+
+// Comparisons: ==, !=, <, <=, >, >=
+?comp_expr: sum_expr
+          | comp_expr "==" sum_expr -> eq
+          | comp_expr "!=" sum_expr -> ne
+          | comp_expr "<"  sum_expr -> lt
+          | comp_expr "<=" sum_expr -> le
+          | comp_expr ">"  sum_expr -> gt
+          | comp_expr ">=" sum_expr -> ge
+
+// sum_expr handles +, -
+?sum_expr: term
+         | sum_expr "+" term        -> add
+         | sum_expr "-" term        -> sub
+
+// term handles *, /, %
+?term: factor
+     | term "*" factor             -> mul
+     | term "/" factor             -> div
+     | term "%" factor             -> mod
+
+// factor can be a unary operator or a parenthesized expression
+?factor: unary
+       | "(" expr ")"
+
+// unary handles unary minus and logical not
+?unary: "!" unary       -> logical_not
+       | "-" unary      -> neg
+       | atom
+
+// atom: numbers, variables
+?atom: NUMBER           -> number
+     | CNAME            -> variable
+
+// Lark imports for common tokens
+%import common.CNAME
+%import common.NUMBER
+%import common.WS
+%ignore WS

@@ -1,0 +1,14 @@
+fn main(): int {
+    let int x = 10;
+    if (x > 5 and x < 20) {
+        print(111);
+    }
+    while (x != 0) {
+        print(x);
+        mut x = x - 1;
+        if (x == 5) {
+            break;
+        }
+    }
+    return x;
+}
